@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Virtual Glasses Try-On</title>
+
+  <!-- A-Frame & MindAR -->
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-face-aframe.prod.js"></script>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --gold: rgb(182, 160, 64);
+      --dark: #0e0e0e;
+      --light: #f0f0f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(to right, #0f2027, #203a43, #2c5364);
+      color: var(--light);
+    }
+    header { text-align: center; padding: 80px 20px 20px; }
+    header h1 { font-size: 48px; margin-bottom: 10px; color: var(--gold); }
+    header p  { font-size: 18px; color: #ccc; }
+    section { max-width: 1000px; margin: 0 auto; padding: 40px 20px; text-align: center; }
+    section h2 { font-size: 28px; margin-bottom: 15px; color: var(--gold); }
+    section p  { color: #ccc; font-size: 16px; line-height: 1.6; }
+
+    .start-btn {
+      position: fixed; bottom: 30px; right: 30px;
+      background: var(--gold); color: white; border: none;
+      padding: 14px 22px; font-size: 16px; cursor: pointer;
+      border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      z-index: 999;
+    }
+    .modal {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.92); display: none;
+      flex-direction: column; justify-content: center; align-items: center;
+      z-index: 10000;
+    }
+    .close-btn {
+      position: absolute; top: 10px; right: 10px;
+      background: var(--gold); color: white; border: none;
+      padding: 8px 12px; font-size: 16px; cursor: pointer;
+      border-radius: 5px; z-index: 10001;
+    }
+    #sceneContainer {
+      width: 360px; height: 480px; overflow: hidden;
+      border: 4px solid var(--gold); border-radius: 10px;
+      position: relative;
+    }
+    .glasses-ui {
+      position: absolute; bottom: 20px; left: 50%;
+      transform: translateX(-50%);
+      background: #333; padding: 10px 15px;
+      border-radius: 10px; display: flex; gap: 12px;
+      z-index: 10001;
+    }
+    .glasses-ui button {
+      background: var(--gold); color: white;
+      border: none; padding: 8px 12px; font-size: 14px;
+      border-radius: 5px; cursor: pointer;
+    }
+    /* 🟢 Fix video showing black background */
+    a-scene { background-color: transparent !important; }
+    canvas  { background-color: transparent !important; }
+
+    @media (max-width: 480px) {
+      #sceneContainer { width: 300px; height: 400px; }
+      .start-btn {
+        padding: 12px 18px; font-size: 14px;
+        bottom: 20px; right: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Landing Page -->
+  <header>
+    <h1>Try On Virtual Glasses</h1>
+    <p>See how you'd look with different styles of eyewear using your webcam</p>
+  </header>
+
+  <section>
+    <h2>Why Virtual Try-On?</h2>
+    <p>Choosing the right frame style has never been easier! Use our augmented reality engine to see glasses on your face in real time. No app needed — just your browser and webcam.</p>
+  </section>
+
+  <section>
+    <h2>How It Works</h2>
+    <p>Click the “Try Glasses” button, grant camera access, and instantly view different frames mapped to your face using AI-powered face tracking. Choose your favorite look and screenshot it to share!</p>
+  </section>
+
+  <!-- AR Try-On Modal -->
+  <button class="start-btn" onclick="openTryOn()">Try Glasses</button>
+
+  <div class="modal" id="tryonModal">
+    <button class="close-btn" onclick="closeTryOn()">X</button>
+    <div id="sceneContainer"></div>
+
+    <!-- Model & Size Controls -->
+    <div class="glasses-ui">
+      <!-- model selectors -->
+      <button onclick="changeGlasses('default')">Default</button>
+      <button onclick="changeGlasses('style1')">Style 1</button>
+      <button onclick="changeGlasses('style2')">Style 2</button>
+      <!-- size selectors -->
+      <div style="border-left:1px solid #555; padding-left:12px; display:flex; align-items:center; gap:6px;">
+        <span style="color:#ccc;">Size:</span>
+        <button onclick="changeSize('small')">S</button>
+        <button onclick="changeSize('medium')">M</button>
+        <button onclick="changeSize('large')">L</button>
+        <button onclick="changeSize('xlarge')">XL</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 1) Size multipliers
+    const sizeMultipliers = {
+      small: 0.9701,
+      medium: 1.0,
+      large: 1.0299,
+      xlarge: 1.0597
+    };
+    let currentSizeKey  = 'medium';
+    let currentModelKey = 'default';
+
+    // 2) Your model definitions
+    const modelSettings = {
+      default: { src: '#glassesModel', position: "-0.001 0.01 -0.4", scale: "0.5 0.5 0.5" },
+      style1:  { src: '3dmodel/glasses-01/scene.gltf',    position: "-0.001 0.04 0.1", scale: "0.007 0.007 0.007" },
+      style2:  { src: '3dmodel/glasses-06/scene.gltf', position: "0.001 0.01 -0.1", scale: "0.07 0.07 0.07" }
+    };
+
+    function openTryOn() {
+      const modal     = document.getElementById("tryonModal");
+      const container = document.getElementById("sceneContainer");
+
+      container.innerHTML = `
+        <a-scene 
+          mindar-face 
+          embedded 
+          style="width:100%;height:100%;" 
+          color-space="sRGB" 
+          renderer="colorManagement:true,physicallyCorrectLights" 
+          vr-mode-ui="enabled:false" 
+          device-orientation-permission-ui="enabled:false"
+          mindar-face-system="autoStart:false;ui:false;"
+          id="arScene">
+  
+          <a-assets>
+            <a-asset-item id="glassesModel" src="test.glb"></a-asset-item>
+          </a-assets>
+  
+          <a-camera position="0 0 0" look-controls="true"></a-camera>
+          <a-entity mindar-face-target="anchorIndex:168">
+            <a-gltf-model
+              id="myGlasses"
+              position="-0.001 0.01 -0.4"
+              scale="0.5 0.5 0.5"
+              src="#glassesModel">
+            </a-gltf-model>
+          </a-entity>
+        </a-scene>
+      `;
+      modal.style.display = "flex";
+
+      // start AR once injected
+      setTimeout(() => {
+        const scene       = document.querySelector("a-scene");
+        const mindarSystem= scene.systems["mindar-face-system"];
+        mindarSystem.start();
+        scene.components["mindar-face-system"].start();
+
+        // force resize for proper video feed
+        setTimeout(()=>{
+          scene.resize();
+          window.dispatchEvent(new Event("resize"));
+          // apply initial size multiplier
+          updateGlassesScale();
+        }, 500);
+      }, 500);
+    }
+
+    function closeTryOn(){
+      const modal     = document.getElementById("tryonModal");
+      const container = document.getElementById("sceneContainer");
+      const scene     = document.getElementById("arScene");
+      if(scene && scene.systems["mindar-face-system"]) {
+        scene.systems["mindar-face-system"].stop();
+      }
+      modal.style.display = "none";
+      container.innerHTML = '';
+    }
+
+    function changeGlasses(styleKey){
+      currentModelKey = styleKey;
+      const settings = modelSettings[styleKey] || modelSettings.default;
+      const glasses  = document.getElementById("myGlasses");
+      if(!glasses) return;
+      glasses.setAttribute("src", settings.src);
+      glasses.setAttribute("position", settings.position);
+      glasses.setAttribute("scale", settings.scale);
+      updateGlassesScale();
+    }
+
+    function changeSize(sizeKey){
+      if(!sizeMultipliers[sizeKey]) return;
+      currentSizeKey = sizeKey;
+      updateGlassesScale();
+    }
+
+    // multiplies base scale by selected size multiplier
+    function updateGlassesScale(){
+      const glasses = document.getElementById("myGlasses");
+      if(!glasses) return;
+      const baseScale = modelSettings[currentModelKey].scale
+        .split(" ")
+        .map(Number);
+      const multiplier = sizeMultipliers[currentSizeKey];
+      const newScale = baseScale
+        .map(v => (v * multiplier).toFixed(3))
+        .join(" ");
+      glasses.setAttribute("scale", newScale);
+    }
+  </script>
+</body>
+</html>
