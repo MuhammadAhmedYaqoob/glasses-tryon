@@ -36,6 +36,3 @@ The facemesh detected keypoints that used for overlay the 3D Glasses:
 * [EyeGlasses](https://sketchfab.com/3d-models/eyeglasses-8ec54755399a4eca8a1356812e68fe02) by	thelegendofwolf
 * [3D frames generated in less than 10 seconds](https://sketchfab.com/3d-models/3d-frames-generated-in-less-than-10-seconds-5cc3b37589ba43148352c850a764b2db
 ) by	VReeAI
-
-## Support me 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W6METMY)
